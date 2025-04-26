@@ -9,7 +9,7 @@
 
 int main() {
     printf("[MAIN] Starting Torrent Tracker and Peers\n");
-    printf("How many peers to start with?(MAX 4): ");
+    printf("How many peers to start with? (MAX 4): ");
     int num;
     scanf("%d", num);
 
@@ -22,7 +22,7 @@ int main() {
     if (tracker_pid == 0) {
         // Child: Tracker process
         run_tracker(num);
-        exit(0);
+        //exit(0);
     }
 
     // Parent continues: Spawn peer processes

@@ -4,13 +4,22 @@
 // Constants
 #define MAX_PEERS 4        // Max number of peers
 #define MAX_CHUNKS 100     // Max number of chunks
+#define SHM_NAME "/peer_status_shm"
+#define SHM_SIZE 1024  // Can hold all peer messages
+
+int peer_chunks[MAX_PEERS][MAX_CHUNKS];
 
 
+typedef struct {
+    int peer_done[MAX_PEERS];  // 0 or 1
+} SharedStatus;
 
+SharedStatus *status_ptr;
 
 typedef struct {
     int chunk_id;
     int start_offset;
+    char *data;
     int size;
 } ChunkMessage;
 
@@ -18,7 +27,7 @@ typedef struct {
 typedef struct {
     int chunk_id;         // ID of the chunk
     int owner_peer_id;    // Peer ID that owns this chunk
-    //int is_downloaded;    // Whether this chunk has been downloaded by the peer
+    char data[__INT_MAX__];
     int start_offset;  
     int size;  
 } ChunkInfo;
@@ -36,7 +45,7 @@ void create_pipes(int num);
 void run_tracker(int num); 
 void run_peer(int peer_id);
 void peer_registration(int num);
-void peer_deregistration(int peer_id);
+void peer_deregistration(SharedStatus *status_ptr, int shm_fd);
 void receive_chunk_assignment(int peer_id);
 
 #endif
