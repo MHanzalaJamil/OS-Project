@@ -9,6 +9,7 @@
 
 // int peer_chunks[MAX_PEERS][MAX_CHUNKS];
 
+sem_t *sem; // semaphore for shared memory
 
 typedef struct {
     int peer_done[MAX_PEERS];  // 0 or 1 (Shared Memory)

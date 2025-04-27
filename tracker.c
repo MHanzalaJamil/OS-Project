@@ -1,4 +1,5 @@
 #include "common.h"
+#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +14,7 @@ registered_peers = 0;
 
 // void split_file_into_chunks(const char* filename);
 
-void assign_chunks_to_peer(int peer_id)
+void assign_chunks_to_peer(int peer_id) //First Come First Serve basis
 {
     char fifo_name[64];
     int fd;
@@ -76,7 +77,7 @@ void split_file_chunks_among_peers(const char *filename, int num)
     if(read(fd, buffer, sizeof(buffer)) == -1){
         perror("error read");
     }
-
+    close(fd);
     // Calculate chunk size
 
     // if(file_size % MAX_PEERS != 0){
@@ -114,12 +115,16 @@ void split_file_chunks_among_peers(const char *filename, int num)
 
 int check_all_peers_done(SharedStatus *status_ptr)
 {
+    sem = sem_open("/my_sem", 0);
+    sem_wait(sem);
     for (int i = 0; i < registered_peers; i++)
     {
-        if (status_ptr->peer_done[i] == 0)
+        if (status_ptr->peer_done[i] == 0){
+            sem_post(sem);
             return 0; // At least one peer not done
+        }
     }
-
+    sem_post(sem);
     return 1;
 }
 
@@ -143,7 +148,8 @@ void run_tracker(int num)
     create_pipes(num); // Named pipe for tracker
     split_file_chunks_among_peers("sample.txt", num);
     peer_registration(num);
-
+    sem = sem_open("/my_sem", O_CREAT, 0666, 1);
+    sem_wait(sem);
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
     ftruncate(shm_fd, sizeof(SharedStatus));
     status_ptr = (SharedStatus* )mmap(NULL, sizeof(SharedStatus), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
@@ -153,8 +159,8 @@ void run_tracker(int num)
     {
         status_ptr->peer_done[i] = 0;
     }
-    
-
+    sem_post(sem);
+    sem_close(sem);
     for (int i = 0; i < registered_peers; i++)
     {
         assign_chunks_to_peer(i);
@@ -208,6 +214,8 @@ void peer_deregistration(SharedStatus *status_ptr, int shm_fd)
     
     // printf("[TRACKER] Peer%d deregistered.\n", peer_id);
 }
+
+
 
 void create_pipes(int num)
 {

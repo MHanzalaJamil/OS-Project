@@ -130,12 +130,7 @@ void work_done(int peer_id){
         exit(1);
     }
 
-    // Map the shared memory to the process's address space
-    status_ptr = (SharedStatus *)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (status_ptr == MAP_FAILED) {
-        perror("Error mapping shared memory");
-        exit(1);
-    }
+    
     // Open the file for writing the downloaded chunks
     int fd = open(file_name, O_CREAT | O_WRONLY, 0666);
     if (fd < 0) {
@@ -161,16 +156,26 @@ void work_done(int peer_id){
             printf("[PEER %d] is writing it's file...\n", peer_id);
         }
     }
-
+    free(temp_buff);
     // Close the file after writing
     close(fd);
+    
+    // Map the shared memory to the process's address space
+    status_ptr = (SharedStatus *)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (status_ptr == MAP_FAILED) {
+        perror("Error mapping shared memory");
+        exit(1);
+    }
 
+    sem = sem_open("/my_sem", 0);
+    sem_wait(sem);
     // Now, update the shared memory to indicate the peer has completed downloading
     status_ptr->peer_done[peer_id] = 1;  // 1 means completed
     printf("[PEER %d] Peer has completed downloading all chunks!\n", peer_id);
     close(shm_fd);
+    sem_post(sem);
+    sem_close(sem);
     
-    free(temp_buff);
     
     char pipe_name[32];
     sprintf(pipe_name, "peer_pipe_%d", peer_id);
