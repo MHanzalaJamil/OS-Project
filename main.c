@@ -37,11 +37,11 @@ int main() {
         if (peer_pid == 0) {
             // Child: Peer process
             run_peer(i);
-            exit(0);
+            // exit(0);
         }
 
         // Parent: continue loop to spawn next peer
-        sleep(1); // optional delay between peer launches
+        usleep(100000); // optional delay between peer launches
     }
 
     // Parent waits for all children

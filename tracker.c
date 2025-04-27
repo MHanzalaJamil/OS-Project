@@ -36,7 +36,7 @@ void assign_chunks_to_peer(int peer_id)
             msg.start_offset = chunks[i].start_offset;
             msg.size = chunks[i].size;
             msg.data = chunks[i].data;
-            
+            msg.total_number = total_chunks;
 
             if (write(fd, &msg, sizeof(msg)) == -1)
             {
@@ -94,13 +94,15 @@ void split_file_chunks_among_peers(const char *filename, int num)
         chunks[i].owner_peer_id = i % num;
         chunks[i].start_offset = i * chunk_size;
         chunks[i].size = (i == total_chunks - 1) ? (file_size - i * chunk_size) : chunk_size;
+
         for (int j = chunks[i].start_offset; j < (chunks[i].start_offset + chunks[i].size); j++)
         {
             chunks[i].data[c] = buffer[j];
             c++;
         }
+        chunks[i].data[c] = '\0';
         
-        peer_chunks[chunks[i].owner_peer_id][chunks[i].chunk_id] = 1; // Updating to array
+        //peer_chunks[chunks[i].owner_peer_id][chunks[i].chunk_id] = 1; // Updating to array
 
         printf("Chunk %d -> Peer %d, Offset: %d, Size: %d bytes\n",
                chunks[i].chunk_id,
@@ -121,23 +123,23 @@ int check_all_peers_done(SharedStatus *status_ptr)
     return 1;
 }
 
-void initialize_chunks(){
-    for (int i = 0; i < MAX_PEERS; i++)
-    {
-        for (int j = 0; j < MAX_CHUNKS; j++)
-        {
-            peer_chunks[i][j] = 0; // No chunk to any peer right now
-        }
+// void initialize_chunks(){
+//     for (int i = 0; i < MAX_PEERS; i++)
+//     {
+//         for (int j = 0; j < MAX_CHUNKS; j++)
+//         {
+//             peer_chunks[i][j] = 0; // No chunk to any peer right now
+//         }
         
-    }
+//     }
     
-}
+// }
 
 void run_tracker(int num)
 {
     printf("[TRACKER] Tracker started\n");
 
-    initialize_chunks();
+    //initialize_chunks();
     create_pipes(num); // Named pipe for tracker
     split_file_chunks_among_peers("sample.txt", num);
     peer_registration(num);
@@ -185,7 +187,20 @@ void peer_deregistration(SharedStatus *status_ptr, int shm_fd)
             munmap(status_ptr, sizeof(SharedStatus));  // 1. Unmap the shared memory from your address space
             close(shm_fd);                             // 2. Close the file descriptor
 
-            shm_unlink(SHM_NAME);                      // Unlink the shared memory segment
+            shm_unlink(SHM_NAME);  // Unlink the shared memory segment
+            int fd = -1;    
+            char pipe_name[32];                
+            for (int i = 0; i < registered_peers; i++)
+            {
+                sprintf(pipe_name, "peer_pipe_%d", i);
+                while (fd == -1)
+                {
+                    fd = open(pipe_name, O_WRONLY | O_NONBLOCK);
+                }
+                write(fd, 1, sizeof(int));
+                close(fd);
+                
+            }
             exit(0);
         }
         usleep(500000);  // 0.5 second delay between checks

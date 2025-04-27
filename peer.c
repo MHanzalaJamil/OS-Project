@@ -12,37 +12,65 @@
 
 #define MAX_BUFFER_SIZE 101
 
-typedef struct {
-    ChunkMessage buffer[MAX_BUFFER_SIZE];
-    int in;
-    int out;
-    int count; // size count
-    pthread_mutex_t mutex;
-    sem_t empty;
-    sem_t full;
-} ChunkBuffer;
-
-
-
-ChunkBuffer shared_buffer;
-
-void init_chunk_buffer() {
-    shared_buffer.in = 0;
-    shared_buffer.out = 0;
-    shared_buffer.count = 0;
-    pthread_mutex_init(&shared_buffer.mutex, NULL);
-    sem_init(&shared_buffer.empty, 0, MAX_BUFFER_SIZE);
-    sem_init(&shared_buffer.full, 0, 0);
-}
-
+pthread_mutex_t mutex_lock_for_buffer = PTHREAD_MUTEX_INITIALIZER;
+total_downloaded = 0;
+total_chunks = 0;
+//sem_t reader, writer;
+ChunkMessage buff[MAX_CHUNKS];
 
 
 void *upload_thread_func(void *arg){
+    int peer_id = *(int*)arg;
+    char pipe_name[32];
+    sprintf(pipe_name, "peer_pipe_%d", peer_id);
 
+    printf("[Peer %d] Upload thread started.\n", peer_id);
+    
+    int fd = open(pipe_name, O_WRONLY);
+    //sem_wait(&writer);
+    pthread_mutex_lock(&mutex_lock_for_buffer);
+
+    if(write(fd, &buff[0], sizeof(buff[0])) == -1){
+        perror("Error Pipeline");
+        pthread_exit(1);
+    }
+
+    pthread_mutex_unlock(&mutex_lock_for_buffer);
+    //sem_post(&writer);
+    close(fd);
+    return NULL;
 }
 
-void* download_thread_func(void *arg){
+void* download_thread_func(void *arg) {
+    int peer_id = *(int*) arg;
 
+    char pipe_name[32];
+    int i = 0;
+    while(total_downloaded != total_chunks){
+
+        i++;
+
+        if(i == peer_id) continue;
+
+        sprintf(pipe_name, "peer_pipe_%d", i);
+        int fd = open(pipe_name, O_RDONLY);
+        pthread_mutex_lock(&mutex_lock_for_buffer);
+        ChunkMessage msg;
+        if(read(fd, &msg, sizeof(msg)) == -1){
+            perror("Error Pipeline");
+            pthread_exit(1);
+        }
+        write_to_my_buff(msg);
+        pthread_mutex_unlock(&mutex_lock_for_buffer);
+        close(fd);
+        
+    }
+    return NULL;
+}
+
+
+void write_to_my_buff(ChunkMessage msg){
+    buff[total_downloaded++] = msg;
 }
 
 void run_peer(int peer_id){
@@ -58,14 +86,14 @@ void run_peer(int peer_id){
     printf("[PEER %d] Started and waiting for chunks...\n", peer_id);
 
     ChunkMessage msg;
-    init_chunk_buffer();
+
     while (read(fd, &msg, sizeof(msg)) > 0) {
-        printf("[PEER %d] Received Chunk %d | Offset: %d | Size: %d bytes\n",
-               peer_id, msg.chunk_id, msg.start_offset, msg.size);
-               
+        printf("[PEER %d] Received Chunk %d | Offset: %d | Size: %d bytes | Data: %s\n",
+               peer_id, msg.chunk_id, msg.start_offset, msg.size, msg.data);
+        total_chunks = msg.total_number;      
                
             }
-            //produce_chunk(msg);
+        write_to_my_buff(msg);
             pthread_t upload_thread, download_thread;
 
         if (pthread_create(&upload_thread, NULL, upload_thread_func, (void*)(long)peer_id) != 0) {
@@ -78,6 +106,10 @@ void run_peer(int peer_id){
             exit(1);
         }
         close(fd);
+        pthread_join(download_thread, NULL);
+        if(total_chunks == total_downloaded){
+            work_done(peer_id);
+        }
 
     
 }
@@ -110,23 +142,23 @@ void work_done(int peer_id){
         perror("Error opening file for writing");
         exit(1);
     }
-    ChunkMessage *temp_buff = malloc(sizeof(ChunkMessage) * shared_buffer.count);
-    for (int i = 0; i < shared_buffer.count; i++) {
-        temp_buff[i] = shared_buffer.buffer[i];
+    ChunkMessage *temp_buff = malloc(sizeof(ChunkMessage) * total_chunks);
+    for (int i = 0; i < total_chunks; i++) {
+        temp_buff[i] = buff[i];
     }
     
 
-    qsort(temp_buff, shared_buffer.count, sizeof(ChunkMessage), compare_chunks);
+    qsort(temp_buff, total_chunks, sizeof(ChunkMessage), compare_chunks);
     // Write each downloaded chunk to the file
-    for (int i = 0; i < shared_buffer.count; i++) {
+    for (int i = 0; i < total_chunks; i++) {
         {
-            ssize_t bytes_written = write(fd, shared_buffer.buffer[i].data, shared_buffer.buffer[i].size);
+            ssize_t bytes_written = write(fd, temp_buff[i].data, temp_buff[i].size);
             if (bytes_written == -1) {
                 perror("Error writing to file");
                 close(fd);
                 exit(1);
             }
-            printf("[PEER %d] completed it's file...\n", peer_id);
+            printf("[PEER %d] is writing it's file...\n", peer_id);
         }
     }
 
@@ -137,21 +169,42 @@ void work_done(int peer_id){
     status_ptr->peer_done[peer_id] = 1;  // 1 means completed
     printf("[PEER %d] Peer has completed downloading all chunks!\n", peer_id);
     close(shm_fd);
+    
+    free(temp_buff);
+    
+    char pipe_name[32];
+    sprintf(pipe_name, "peer_pipe_%d", peer_id);
+
+    int status;
+    int fd;
+    while(1){
+        fd = open(pipe_name, O_RDONLY);
+        if(read(fd, &status, sizeof(int)) > 0){
+            if(status == 1){ // 1 means the tracker has permitted to exit the peer
+                close(fd);
+                printf("[PEER %d] Peer is exiting!\n", peer_id);
+                exit(0);
+            }
+        }
+        close(fd);
+        usleep(500000);
+    }
+    //exit(0);
 }
 
-void produce_chunk(ChunkMessage chunk) {
-    sem_wait(&shared_buffer.empty);
-    pthread_mutex_lock(&shared_buffer.mutex);
+// void produce_chunk_in_my_buffer(ChunkMessage chunk) {
+//     sem_wait(&shared_buffer.empty);
+//     pthread_mutex_lock(&shared_buffer.mutex);
 
-    shared_buffer.buffer[shared_buffer.in] = chunk;
-    shared_buffer.in = (shared_buffer.in + 1) % MAX_BUFFER_SIZE;
-    shared_buffer.count++;
+//     shared_buffer.buffer[shared_buffer.in] = chunk;
+//     shared_buffer.in = (shared_buffer.in + 1) % MAX_BUFFER_SIZE;
+//     shared_buffer.count++;
 
-    printf("Produced chunk %d (buffer count: %d)\n", chunk.chunk_id, shared_buffer.count);
+//     printf("Produced chunk %d (buffer count: %d)\n", chunk.chunk_id, shared_buffer.count);
 
-    pthread_mutex_unlock(&shared_buffer.mutex);
-    sem_post(&shared_buffer.full);
-}
+//     pthread_mutex_unlock(&shared_buffer.mutex);
+//     sem_post(&shared_buffer.full);
+// }
 
 // ChunkMessage consume_chunk() {
 //     sem_wait(&shared_buffer.full);

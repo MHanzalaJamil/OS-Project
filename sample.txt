@@ -1,1 +1,4 @@
-Hello
+Built a torrent server.  
+Split files into chunks.  
+Peers exchanged chunks.  
+Used threads, locks.
