@@ -21,6 +21,12 @@ ChunkMessage buff[MAX_CHUNKS];
 
 void *upload_thread_func(void *arg){
     int peer_id = *(int*)arg;
+    if (buff[0].size <= 0)
+    {
+        printf("[Pear %d] No Initial chunk to upload\n", peer_id);
+        return NULL;
+    }
+    
     char pipe_name[32];
     sprintf(pipe_name, "peer_pipe_%d", peer_id);
 
@@ -31,6 +37,7 @@ void *upload_thread_func(void *arg){
     pthread_mutex_lock(&mutex_lock_for_buffer);
 
     if(write(fd, &buff[0], sizeof(buff[0])) == -1){
+        pthread_mutex_unlock(&mutex_lock_for_buffer);
         perror("Error Pipeline");
         pthread_exit(1);
     }
@@ -54,14 +61,13 @@ void* download_thread_func(void *arg) {
 
         sprintf(pipe_name, "peer_pipe_%d", i);
         int fd = open(pipe_name, O_RDONLY);
-        pthread_mutex_lock(&mutex_lock_for_buffer);
         ChunkMessage msg;
         if(read(fd, &msg, sizeof(msg)) == -1){
             perror("Error Pipeline");
             pthread_exit(1);
         }
         write_to_my_buff(msg);
-        pthread_mutex_unlock(&mutex_lock_for_buffer);
+        
         close(fd);
         
     }
@@ -70,7 +76,9 @@ void* download_thread_func(void *arg) {
 
 
 void write_to_my_buff(ChunkMessage msg){
+    pthread_mutex_lock(&mutex_lock_for_buffer);
     buff[total_downloaded++] = msg;
+    pthread_mutex_unlock(&mutex_lock_for_buffer);
 }
 
 void run_peer(int peer_id){
@@ -87,13 +95,20 @@ void run_peer(int peer_id){
 
     ChunkMessage msg;
 
-    while (read(fd, &msg, sizeof(msg)) > 0) {
-        printf("[PEER %d] Received Chunk %d | Offset: %d | Size: %d bytes | Data: %s\n",
-               peer_id, msg.chunk_id, msg.start_offset, msg.size, msg.data);
+    if (read(fd, &msg, sizeof(msg)) != -1) {
+        if(msg.chunk_id == -1){
+            printf("[PEER %d] Received Empty Chunk (No initial chunk)..\n",
+               peer_id);
+        }
+        else{
+            printf("[PEER %d] Received Chunk %d | Offset: %d | Size: %d bytes | Data: %s\n",
+                peer_id, msg.chunk_id, msg.start_offset, msg.size, msg.data);
+            write_to_my_buff(msg);
+        }
         total_chunks = msg.total_number;      
                
-            }
-        write_to_my_buff(msg);
+    }
+        
             pthread_t upload_thread, download_thread;
 
         if (pthread_create(&upload_thread, NULL, upload_thread_func, (void*)(long)peer_id) != 0) {
@@ -123,7 +138,7 @@ int compare_chunks(const void *a, const void *b) {
 
 void work_done(int peer_id){
     char file_name[32];
-    sprintf(file_name, "peer_%d_downloaded_file", peer_id);
+    sprintf(file_name, "peer_%d_downloaded_file.txt", peer_id);
     int shm_fd = shm_open(SHM_NAME, O_RDWR, 0666);
     if (shm_fd < 0) {
         perror("Error opening shared memory");
@@ -192,7 +207,7 @@ void work_done(int peer_id){
             }
         }
         close(fd);
-        usleep(500000);
+        usleep(500000); //checking whether the tracker has called to exit this peer
     }
     //exit(0);
 }

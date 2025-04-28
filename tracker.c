@@ -28,11 +28,12 @@ void assign_chunks_to_peer(int peer_id) //First Come First Serve basis
         perror("open fifo");
         return;
     }
-
+    int check = 0;
     for (int i = 0; i < total_chunks; i++)
     {
         if (chunks[i].owner_peer_id == peer_id)
         {
+            check = 1;
             msg.chunk_id = chunks[i].chunk_id;
             msg.start_offset = chunks[i].start_offset;
             msg.size = chunks[i].size;
@@ -50,7 +51,22 @@ void assign_chunks_to_peer(int peer_id) //First Come First Serve basis
             }
         }
     }
-
+    if(!check){
+        msg.chunk_id = -1;
+        msg.start_offset = -1;
+        msg.size = -1;
+        msg.data = '\0';
+        msg.total_number = total_chunks;
+        if (write(fd, &msg, sizeof(msg)) == -1)
+        {
+            perror("write to fifo");
+        }
+        else
+        {
+            printf("Tracker sent Blank Chunk to Peer %d via %s\n",
+                    peer_id, fifo_name);
+        }
+    }
     close(fd);
 }
 
