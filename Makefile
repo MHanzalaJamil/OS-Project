@@ -1,52 +1,46 @@
-# Compiler settings
-CC = gcc
-CFLAGS = -Wall -g
+#CC = gcc
+#CFLAGS = -Wall -pthread
 
-# Directories
-SRC_DIR = .
-OBJ_DIR = obj
-BIN_DIR = bin
-
-# Files
-COMMON_H = common.h
-MAIN_SRC = main.c
-TRACKER_SRC = tracker.c
-PEER_SRC = peer.c
+# Source files
+#SRCS = main.c peer.c tracker.c
 
 # Object files
-MAIN_OBJ = $(OBJ_DIR)/main.o
-TRACKER_OBJ = $(OBJ_DIR)/tracker.o
-PEER_OBJ = $(OBJ_DIR)/peer.o
+#OBJS = main.o peer.o tracker.o
 
-# Output executables
-EXEC = $(BIN_DIR)/os_program
+# Output executable name
+#TARGET = my_program
 
-# Targets
-all: $(EXEC)
+#all: $(TARGET)
 
-# Rule to compile main
-$(MAIN_OBJ): $(MAIN_SRC) $(COMMON_H)
-	$(CC) $(CFLAGS) -c $(MAIN_SRC) -o $(MAIN_OBJ)
+#$(TARGET): $(OBJS)
+#	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
 
-# Rule to compile tracker
-$(TRACKER_OBJ): $(TRACKER_SRC) $(COMMON_H)
-	$(CC) $(CFLAGS) -c $(TRACKER_SRC) -o $(TRACKER_OBJ)
+#%.o: %.c common.h
+#	$(CC) $(CFLAGS) -c $< -o $@
 
-# Rule to compile peer
-$(PEER_OBJ): $(PEER_SRC) $(COMMON_H)
-	$(CC) $(CFLAGS) -c $(PEER_SRC) -o $(PEER_OBJ)
+#clean:
+#	rm -f $(OBJS) $(TARGET)
 
-# Rule to link the final executable
-$(EXEC): $(MAIN_OBJ) $(TRACKER_OBJ) $(PEER_OBJ)
-	$(CC) $(CFLAGS) -o $(EXEC) $(MAIN_OBJ) $(TRACKER_OBJ) $(PEER_OBJ)
+CC = gcc
+CFLAGS = -Wall -pthread
 
-# Clean up object and binary files
+OBJS = main.o peer.o tracker.o
+TARGET = project
+
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS)  $(OBJS) -o $(TARGET) -lpthread
+
+main.o: main.c common.h
+	$(CC) $(CFLAGS) -c main.c
+
+peer.o: peer.c common.h
+	$(CC) $(CFLAGS) -c peer.c
+
+tracker.o: tracker.c common.h
+	$(CC) $(CFLAGS) -c tracker.c
+
+run:
+	./$(TARGET)
+
 clean:
-	rm -rf $(OBJ_DIR)/*.o $(BIN_DIR)/*
-
-# Create necessary directories if they don't exist
-$(OBJ_DIR) $(BIN_DIR):
-	mkdir -p $@
-
-# Add phony targets (non-file targets)
-.PHONY: all clean
+	rm -f *.o $(TARGET)
