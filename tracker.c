@@ -9,10 +9,11 @@
 #include <sys/mman.h>
 #include <math.h>
 
-total_chunks = 0;
-registered_peers = 0;
-
-// void split_file_into_chunks(const char* filename);
+//int total_chunks = 0;
+int registered_peers = 0;
+//SharedStatus *status_ptr; //pointer for shared memory
+ChunkInfo chunks[MAX_CHUNKS];
+//sem_t *sem;
 
 void assign_chunks_to_peer(int peer_id) //First Come First Serve basis
 {
@@ -51,7 +52,7 @@ void assign_chunks_to_peer(int peer_id) //First Come First Serve basis
             }
         }
     }
-    if(!check){
+    if(!check) {
         msg.chunk_id = -1;
         msg.start_offset = -1;
         msg.size = -1;
@@ -219,7 +220,8 @@ void peer_deregistration(SharedStatus *status_ptr, int shm_fd)
                 {
                     fd = open(pipe_name, O_WRONLY | O_NONBLOCK);
                 }
-                write(fd, 1, sizeof(int));
+                int status = 1;
+                write(fd, &status, sizeof(int));
                 close(fd);
                 
             }
