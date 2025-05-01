@@ -20,7 +20,7 @@ extern SharedStatus *status_ptr;
 typedef struct {
     int chunk_id;
     int start_offset;
-    char *data;
+    char data[1024];
     int size;
     int total_number;
 } ChunkMessage; //used for transfer of chunks
@@ -29,7 +29,7 @@ typedef struct {
 typedef struct {
     int chunk_id;         // ID of the chunk
     int owner_peer_id;    // Peer ID that owns this chunk
-    char data[__INT_MAX__];
+    char data[1024];
     int start_offset;  
     int size;  
 } ChunkInfo; // chunk info holder
@@ -47,7 +47,7 @@ void create_pipes(int num);
 void run_tracker(int num); 
 void peer_deregistration(SharedStatus *status_ptr, int shm_fd);
 
-void run_peer(int peer_id, char peer_socket_path[][108], int num);
+void run_peer(int peer_id, char peer_socket_path[][108], int num, int i);
 void peer_registration(int num);
 int compare_chunks(const void *a, const void *b);
 void work_done(int peer_id);

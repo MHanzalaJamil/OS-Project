@@ -38,7 +38,11 @@ void assign_chunks_to_peer(int peer_id) //First Come First Serve basis
             msg.chunk_id = chunks[i].chunk_id;
             msg.start_offset = chunks[i].start_offset;
             msg.size = chunks[i].size;
-            msg.data = chunks[i].data;
+            for (int j = 0; j < chunks[i].size; j++)
+            {
+               msg.data[j] = chunks[i].data[j]; 
+            }
+            
             msg.total_number = total_chunks;
 
             if (write(fd, &msg, sizeof(msg)) == -1)
@@ -56,7 +60,7 @@ void assign_chunks_to_peer(int peer_id) //First Come First Serve basis
         msg.chunk_id = -1;
         msg.start_offset = -1;
         msg.size = -1;
-        msg.data = '\0';
+        msg.data[0] = '\0';
         msg.total_number = total_chunks;
         if (write(fd, &msg, sizeof(msg)) == -1)
         {
@@ -105,9 +109,10 @@ void split_file_chunks_among_peers(const char *filename, int num)
     total_chunks = (file_size + chunk_size - 1) / chunk_size;
 
     printf("Splitting into %d chunks (~%d bytes each)\n", total_chunks, chunk_size);
-    int c = 0;
+    int c;
     for (int i = 0; i < total_chunks; ++i)
     {
+        c = 0;
         chunks[i].chunk_id = i;
         chunks[i].owner_peer_id = i % num;
         chunks[i].start_offset = i * chunk_size;
@@ -209,22 +214,6 @@ void peer_deregistration(SharedStatus *status_ptr, int shm_fd)
             printf("[TRACKER] All peers completed. Exiting.\n");
             munmap(status_ptr, sizeof(SharedStatus));  // 1. Unmap the shared memory from your address space
             close(shm_fd);                             // 2. Close the file descriptor
-
-            shm_unlink(SHM_NAME);  // Unlink the shared memory segment
-            int fd = -1;    
-            char pipe_name[32];                
-            for (int i = 0; i < registered_peers; i++)
-            {
-                sprintf(pipe_name, "peer_pipe_%d", i);
-                while (fd == -1)
-                {
-                    fd = open(pipe_name, O_WRONLY | O_NONBLOCK);
-                }
-                int status = 1;
-                write(fd, &status, sizeof(int));
-                close(fd);
-                
-            }
             exit(0);
         }
         usleep(500000);  // 0.5 second delay between checks
